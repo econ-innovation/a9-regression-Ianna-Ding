@@ -1,0 +1,1134 @@
+---
+title: "Assignment9_regression"
+subtitle: "Does Science Advance One Funeral at a Time?"
+author: "邓会 林定康 丁岩钧 黄永源 "
+institute: "应用经济学中的大数据分析"
+output: ioslides_presentation
+date: "2024-01-19"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+---
+## 论文基本信息
+
+- title：Does Science Advance One Funeral at a Time?
+
+- author:Lauren Cohen; Umit Gurun; Danielle Li
+
+- published: AUGUST 2019
+
+- journal: THE AMERICAN ECONOMIC REVIEW
+
+---
+
+## 论文简介
+
+- 本文研究的是科学家死亡能否对他们的所在的研究领域产生重要的影响。
+
+- 作者使用DID方法来验证生物医学研究背景下的“普朗克原理”。
+
+- 研究了452名杰出科学家的早逝如何改变了他们所在子领域的活力,然后与匹配的控制组
+  进行对比。
+
+- 研究表明，这种影响是两方面的，一方面：与早逝的科学家有合作关系的学者发表在
+  该领域的文章会减少，另一方面：新进入者文献数量则会增加。
+
+---
+
+## 论文图表复现
+
+- 小组分工：
+
+- 邓会：table1, table2, figure1, figure3a, markdown
+
+- 林定康：table3,figure2
+
+- 丁岩钧：table6,table7
+
+- 黄永源：table4,table5,figure3
+
+---
+
+## table1:
+
+```{r cars, echo = FALSE}
+library(haven)
+library(dplyr)
+library(kableExtra)
+
+origin_data <- read_dta("aer_2016-1574_replication_set.dta")
+
+table1_data <- data %>%
+  filter(treat == 1)
+
+table1_data <- table1_data %>%
+  group_by(star_id) %>%
+  mutate(nb_srce = n_distinct(srce_pmid)) %>%
+  slice_tail(n = 1)
+
+table1_data$deg[table1_data$deg == 6] <- 2
+table1_data$deg[table1_data$deg == 4] <- 1
+
+table1_data <- table1_data %>%
+  mutate(
+    MD = (deg == 1),
+    PhD = (deg == 2),
+    MDPhD = (deg == 3),
+    sudden = (cod == 2)
+  )
+
+table1_data <-  table1_data %>% select(yob,deg_year,death_year,aad,female,MD,PhD,MDPhD,sudden,nb_srce,
+                       inv_stk_pubs,inv_stk_cites,inv_stk_nih,
+                       star_on_ss_wthn5,stk_edtrls_at_death)
+
+label<- c(
+  star_id="star_id",yob = "Year of Birth", death_year = "Year of Death", aad = "Age at Death", deg_year = "Degree year", sudden = "Sudden Death",
+  MD = "MD Degree", PhD = "PhD Degree", MDPhD = "MD/PhD Degree", female = "Female", nb_srce = "Nb. of Subfields",
+  inv_stk_pubs = "Career Nb. of Pubs.", inv_stk_cites = "Career Nb. of Citations",
+  inv_stk_nih = "Career NIH Funding", star_on_ss_wthn5 = "Sits on NIH Study Section",
+  stk_edtrls_at_death = "Career Nb. of Editorials"
+)
+
+variable <- colnames(table1_data)
+variable.label <- cbind(variable,label)
+rownames(variable.label) <- NULL
+
+table01_data=data.frame(
+  Mean=c(colMeans(table1_data)),
+  SD= c(sapply(table1_data,sd)),
+  Median = c(sapply(table1_data,median)),
+  Min = c(sapply(table1_data,min)),
+  Max = c(sapply(table1_data,max))
+)
+
+rownames(table01_data)<- c("star_id","Year of Birth", "Year of Death", "Age at Death", "Degree year", "Sudden Death",
+        "MD Degree", "PhD Degree",  "MD/PhD Degree", "Female", "Nb. of Subfields",
+       "Career Nb. of Pubs.", "Career Nb. of Citations",
+       "Career NIH Funding", "Sits on NIH Study Section",
+       "Career Nb. of Editorials")
+
+table01_data <- table01_data[-1,]
+
+table <- kable(
+  table01_data,
+  col.names = c("Mean", "SD", "Median","Min.", "Max."),
+  digits = 2,
+  caption = "Table 1—Summary Statistics: Deceased Superstar Scientists",
+  booktabs = TRUE
+) %>%
+  kable_styling()
+
+note <- "Notes: Sample consists of 452 superstar life scientists who died while still actively engaged in research. See online Appendix A for more details on sample construction."
+table_with_note <- paste0(as.character(table), "\n", note)
+
+writeLines(table_with_note, "table1.html")
+```
+---
+## table2
+
+- table2与table1都是描述性统计表，table2根据treat进行分组统计
+目前存在分组格式的问题
+
+```{r,echo=FALSE}
+library(tidyverse)
+library(psych)
+library(gt)
+
+table2_data <- data %>%
+  group_by(id) %>%
+  arrange(id, year) %>%
+  mutate(
+    stk_nbpmra_tcoauth = cumsum(nb_pmra_tcoauth),
+    stk_nbpmra_ncoauth = cumsum(nb_pmra_ncoauth),
+    stk_nbpmra_ycoauth = cumsum(nb_pmra_ycoauth),
+    stk_nbgrants_tcoauth = cumsum(nbgrants_tcoauth)
+  ) %>%
+  filter(year == death_year)
+
+table2_data <- table2_data %>%
+  group_by(xid, treat) %>%
+  mutate(
+    nbfields_inxid = n_distinct(srce_pmid),
+    weight = 1 / nbfields_inxid
+  ) %>%
+  ungroup()
+
+table2_data <-  table2_data %>% select(treat,stk_nbpmra_tcoauth, stk_nbpmra_ncoauth, stk_nbpmra_ycoauth,
+                                       nbauthors, srce_stkcites, srce_lngrn_cites, female, deg_year,
+                                       death_year, aad, inv_stk_pubs, inv_stk_nih, inv_stk_cites)
+
+label<- c(
+  "treat"="treat",
+  "stk_nbpmra_tcoauth" = "Baseline Stock of Related Articles in the Field",
+  "stk_nbpmra_ncoauth" = "Baseline Stock of Related Articles in the Field, Non-Collaborators",
+  "stk_nbpmra_ycoauth" = "Baseline Stock of Related Articles in the Field, Collaborators",
+  "female" = "Investigator Gender",
+  "death_year" = "Death Year",
+  "aad" = "Age at Death",
+  "inv_stk_pubs" = "Investigator Cuml. Nb. of Publications",
+  "inv_stk_cites" = "Investigator Cuml. Nb. of Citations",
+  "nbauthors" = "Source Article Nb. of Authors",
+  "srce_lngrn_cites" = "Source Article Long-run Citations",
+  "srce_stkcites" = "Source Article Citations at Baseline",
+  "inv_stk_nih" = "Investigator Cuml. NIH Funding at Baseline",
+  "deg_year" = "Investigator Year of Degree"
+)
+
+table02_data <- table2_data %>%
+  select(treat, stk_nbpmra_tcoauth, stk_nbpmra_ncoauth, stk_nbpmra_ycoauth,
+         nbauthors, srce_stkcites, srce_lngrn_cites, female, deg_year,
+         death_year, aad, inv_stk_pubs, inv_stk_nih, inv_stk_cites) %>%
+  describeBy(group = .$treat, mat = T, digits = 2) %>%
+  select(mean, median, sd, min, max) %>%
+  as.data.frame() %>%
+  cbind(variable = c("Control subfields (observations = 31,142)","Treated subfields (observations = 3,076)",
+                     "Baseline Stock of Related Articles in the Field0","Baseline Stock of Related Articles in the Field1",
+                     "Baseline Stock of Related Articles in the Field, Non-Collaborators0","Baseline Stock of Related Articles in the Field, Non-Collaborators1",
+                     "Baseline Stock of Related Articles in the Field, Collaborators0","Baseline Stock of Related Articles in the Field, Collaborators1",
+                     "Investigator Gender0", "Investigator Gender1",
+                     "Death Year0", "Death Year1",
+                     "Age at Death0", "Age at Death1",
+                     "Investigator Cuml. Nb. of Publications0", "Investigator Cuml. Nb. of Publications1",
+                     "Investigator Cuml. Nb. of Citations0","Investigator Cuml. Nb. of Citations1",
+                     "Source Article Nb. of Authors0","Source Article Nb. of Authors1",
+                     "Source Article Long-run Citations0", "Source Article Long-run Citations1",
+                     "Source Article Citations at Baseline0","Source Article Citations at Baseline1",
+                     "Investigator Cuml. NIH Funding at Baseline0","Investigator Cuml. NIH Funding at Baseline1", 
+                     "Investigator Year of Degree0","Investigator Year of Degree1"),.) %>%
+ 
+  gt()
+
+gtsave(table02_data, filename = "table2.html")
+```
+---
+
+## figure1
+
+- 暂时存在数据处理问题，坐标轴刻度的调整
+
+```{r,echo=F}
+figure1_data <- data %>%
+  select(id, xid, star_id, srce_pmid, srce_pubyear, year, treat, death_year, after_death, nb_pmra_tcoauth, nb_pmra_ycoauth, nb_pmra_ncoauth) %>%
+  arrange(id, year)
+
+figure1_data <- figure1_data %>%
+  group_by(id) %>%
+  mutate(
+    stk_nbpmra_tcoauth = cumsum(nb_pmra_tcoauth),
+    stk_nbpmra_ncoauth = cumsum(nb_pmra_ncoauth),
+    stk_nbpmra_ycoauth = cumsum(nb_pmra_ycoauth)
+  ) %>%
+  filter(year == death_year) %>%
+  select(id, srce_pmid, xid, treat, stk_nbpmra_tcoauth, stk_nbpmra_ncoauth, stk_nbpmra_ycoauth)
+
+figure1_data <- figure1_data %>%
+  group_by(xid, treat) %>%
+  mutate(
+    nbfields_inxid = n_distinct(srce_pmid),
+    weight = 1 / nbfields_inxid
+  ) %>%
+  ungroup()
+
+label(figure1_data$stk_nbpmra_tcoauth) <- "Baseline Stock of Related Articles in the Field"
+label(figure1_data$stk_nbpmra_ncoauth) <- "Baseline Stock of Related Articles in the Field, Non-Collaborators"
+label(figure1_data$stk_nbpmra_ycoauth) <- "Baseline Stock of Related Articles in the Field, Collaborators"
+
+figure01_data <- figure1_data[figure1_data$stk_nbpmra_tcoauth < 400, ]
+
+ggplot(figure01_data, aes(x = stk_nbpmra_tcoauth, fill = factor(treat))) +
+  geom_histogram(binwidth = 20, position = position_dodge(width = 15), alpha = 0.7) +
+  theme_minimal() +
+  labs(
+    title = "Figure 1. Cumulative Stock of Publications at Time of Death",
+    x = "Baseline Stock of Related Articles in the Field",
+    y = "Fraction of Subfields",
+    fill = "Treatment",
+    caption = "Notes: We compute the cumulative number of publications, up to the year that immediately precedes the \nyear of death (or counterfactual year of death) for the 3,076 treated subfields and 31,142 control subfields."
+  ) +
+  scale_x_continuous(breaks = c(0, 25, 50, 75, 100, 150, 200, 300, 400))  +
+  scale_y_continuous(labels = scales::percent_format(scale = 1)) +
+  theme(plot.caption = element_text(size = 7)) 
+```
+---
+
+# figure3a
+
+-纵坐标轴还不会调整，试过调整，会都显示在原点
+
+```{r,echo=F}
+library(haven)
+library(dplyr)
+library(ggplot2)
+
+figure3a_data <- read_dta("aer_2016-1574_srce_rltd_pairs_replication_set.dta")
+
+figure3a_data <- figure3a_data %>%
+  select(xid, srce_pmid, srce_setnb, srce_pubyear, treat, death_year, pmid, r1_pubyear, prox) %>%
+  filter(!is.na(prox), prox != ".")
+
+df <- df %>%
+  mutate(
+    zero_prox = prox == 0,
+    new_scientist_prx = prox == -1,
+    pctile_prx = ntile(prox, 100),
+    max_prx = max(prox)
+  )
+
+figure3a_data$prox[figure3a_data$prox == -1] <- -0.10
+
+table_zero_prox <- table(figure3a_data$zero_prox)
+frac_zero_prox <- round(table_zero_prox[2] / sum(table_zero_prox) * 100, 2)
+
+cat(paste("Fraction with zero proximity:", frac_zero_prox, "%\n"))
+
+summary_new_scientist_prx <- summary(df$new_scientist_prx)
+new_scientist_prox <- round(mean(df$new_scientist_prx) * 100, 2)
+
+cat(paste("Fraction with new scientist proximity:", new_scientist_prox, "%\n"))
+
+ggplot(figure3a_data, aes(x = prox)) +
+  geom_histogram(binwidth = 0.02, fill = "gray", color = "black") +
+  labs(
+    title = "",
+    y = "Number of Source Paper/Related Paper Pairs",
+    x = "Average % Field Overlap between Related Authors and the Star",
+    caption = "Notes: Panel A displays the distribution of overlap between the past output of related authors and each star’s subfield. For each author on a related article matched to the AAMC Faculty Roster, we create a metric of intellectual proximity by computing the fraction of their publications that belongs to the star’s subfield. Slightly more than half of related articles have authors with zero overlap, i.e.,this related article is their first contribution to the star’s subfield. 1.24 percent of related articles are authored by new scientists for whom this publication within the subfield is also their first publication overall. Using this information, we aggregate the number of related articles in a particular subfield and in a particular year, e.g., the number of articles in the subfield in year t that have authors above the ninety-fifth percentile in our measure of field overlap.") +
+  theme_minimal() +
+  scale_y_continuous(labels = scales::comma_format()) +
+  theme(
+    plot.caption = element_text(hjust = 0)
+  )
+```
+---
+## table3
+
+```{r,echo=F}
+library(dplyr)
+library(fixest)
+library(haven)
+library(etable)
+library(tinytex)
+library(AER)
+library(scales)
+df <- read_dta("D:/博一/史东波老师/复现材料/data/aer_2016-1574_replication_set.dta")
+df <- mutate(df,after_death_cmmn = (year>death_year))
+df <- mutate(df,allcod=(cod<=3))
+df <- filter(df,allcod==1)
+table3_c1 <- feglm(nb_pmra_tcoauth ~ after_death + after_death_cmmn | id+year+field_age, data = df,family = poisson(),vcov = ~ star_id,fixef.tol=1e-4,fixef.iter=500)
+table3_c2 <- feglm(nb_pmra_ycoauth ~ after_death + after_death_cmmn | id+year+field_age, data = df,family = poisson(),vcov = ~ star_id,fixef.tol=1e-4,fixef.iter=500)
+table3_c3 <- feglm(nb_pmra_ncoauth ~ after_death + after_death_cmmn | id+year+field_age, data = df,family = poisson(),vcov = ~ star_id,fixef.tol=1e-4,fixef.iter=500)
+df3 <- filter(df,year>=1975, year<2006)
+table3_c4 <- feglm(nbgrants_tcoauth ~ after_death + after_death_cmmn | id+year+field_age, data = df3,family = poisson(),vcov = ~ star_id,fixef.tol=1e-4,fixef.iter=500)
+table3_c5 <- feglm(nbgrants_ycoauth ~ after_death + after_death_cmmn | id+year+field_age, data = df3,family = poisson(),vcov = ~ star_id,fixef.tol=1e-5,fixef.iter=1000)
+table3_c6 <- feglm(nbgrants_ncoauth ~ after_death + after_death_cmmn | id+year+field_age, data = df3,family = poisson(),vcov = ~ star_id,fixef.tol=1e-4,fixef.iter=500)
+summary(table3_c2)
+Number_of_investigators <- c()
+for(i in c("table3_c1",'table3_c2','table3_c3','table3_c4','table3_c5','table3_c6')){
+  i = get(i)
+  if(is.null(i[["obs_selection"]][["obsRemoved"]])){
+    Number_of_investigators <- c(Number_of_investigators,n_distinct(df$star_id))
+  }else{
+    Number_of_investigators <- c(Number_of_investigators,n_distinct(df[i[["obs_selection"]][["obsRemoved"]],]$star_id))
+  }
+}
+Number_of_fields = c(as.character(unname(table3_c1$fixef_sizes["id"])),as.character(unname(table3_c2$fixef_sizes["id"])),as.character(unname(table3_c3$fixef_sizes["id"])),as.character(unname(table3_c4$fixef_sizes["id"])),as.character(unname(table3_c5$fixef_sizes["id"])),as.character(unname(table3_c6$fixef_sizes["id"])))
+Number_of_field_year_obs = c(table3_c1[["nobs"]],table3_c2[["nobs"]],table3_c3[["nobs"]],table3_c4[["nobs"]],table3_c5[["nobs"]],table3_c6[["nobs"]])
+log_likelihood = c(as.integer(table3_c1[["loglik"]]),as.integer(table3_c2[["loglik"]]),as.integer(table3_c3[["loglik"]]),as.integer(table3_c4[["loglik"]]),as.integer(table3_c5[["loglik"]]),as.integer(table3_c6[["loglik"]]))
+etable(table3_c1, table3_c2,table3_c3,table3_c4,table3_c5,table3_c6,
+          title = "Table 3—Effect of Superstar Death on Subfield Entry Rates",
+       digits = "r3",
+       tex = TRUE,
+       file = "table3.tex",
+       replace = TRUE,
+       fitstat=c('n', 'll'),
+       se.row=FALSE,
+       se.below=TRUE,
+       drop ='after_death_cmmnTRUE',
+       dict=c(after_death="After death"),
+       signif.code=NA,
+       #label = "Table 3—Effect of Superstar Death on Subfield Entry Rates",
+       float = TRUE,
+       headers=list("- " =list('All authors'=1,'Collaborators only'=1,'Non-collaborators only'=1,'All authors'=1, 'Collaborators only'=1,'Non-collaborators only'=1),"^ "=list("Publication flows"=3,"NIH funding flows (number of awards)"=3)),
+       #fixef_sizes= TRUE,
+       #fixef_sizes.simplify = TRUE,
+       depvar= FALSE,
+       extralines = list("Number of investigators"=Number_of_investigators,"_Number of fields"=Number_of_fields,"_Number of field-year obs."=Number_of_field_year_obs,"_log likelihood"=log_likelihood),
+       #fixef.group=TRUE,#只是在一行里面显示
+       drop.section=c("fixef" ,"stats"),
+       style.tex=style.tex("aer",line.top="double",var.title = ""),
+       
+       notes = "Note: Estimates stem from conditional (subfield) fixed effects Poisson specifications. The dependent variable is the total number of publications in a subfield in a particular year (columns 1, 2, and 3), or the total number of NIH grants that acknowledge a publication in a subfield (columns 4, 5, and 6). All models incorporate a full suite of year effects and subfield age effects, as well as a term common to both treated and control subfields that switches from 0 to 1 after the death of the star, to address the concern that age, year, and individual fixed effects may not fully account for trends in subfield entry around the time of death. Exponentiating the coefficients and differencing from one yield numbers interpretable as elasticities. For example, the estimates in column 3 imply that treated subfields see an increase in the number of contributions by non-collaborators after the superstar passes away, a statistically significant 100 × (exp[0.082] − 1) = 8.55%. Robust standard errors in parentheses, clustered at the level of the star scientist.")
+```
+---
+## figure2
+
+```{r, echo=FALSE}
+df <- df %>% 
+  mutate(age=year-deg_year,
+         dumm_11 = as.numeric(treat*as.numeric(year-death_year <= -11)),
+         dumm_10 = as.numeric(treat*as.numeric(year-death_year == -10)),
+         dumm_9 = as.numeric(treat*as.numeric(year-death_year == -9)),
+         dumm_8 = as.numeric(treat*as.numeric(year-death_year == -8)),
+         dumm_7 = as.numeric(treat*as.numeric(year-death_year == -7)),
+         dumm_6 = as.numeric(treat*as.numeric(year-death_year == -6)),
+         dumm_5 = as.numeric(treat*as.numeric(year-death_year == -5)),
+         dumm_4 = as.numeric(treat*as.numeric(year-death_year == -4)),
+         dumm_3 = as.numeric(treat*as.numeric(year-death_year == -3)),
+         dumm_2 = as.numeric(treat*as.numeric(year-death_year == -2)),
+         dumm_1 = as.numeric(treat*as.numeric(year-death_year == -1)),
+         dumm_0 = as.numeric(treat*as.numeric(year-death_year == 0)),
+         dumm1 = as.numeric(treat*as.numeric(year-death_year == 1)),
+         dumm2 = as.numeric(treat*as.numeric(year-death_year == 2)),
+         dumm3 = as.numeric(treat*as.numeric(year-death_year == 3)),
+         dumm4 = as.numeric(treat*as.numeric(year-death_year == 4)),
+         dumm5 = as.numeric(treat*as.numeric(year-death_year == 5)),
+         dumm6 = as.numeric(treat*as.numeric(year-death_year == 6)),
+         dumm7 = as.numeric(treat*as.numeric(year-death_year == 7)),
+         dumm8 = as.numeric(treat*as.numeric(year-death_year == 8)),
+         dumm9 = as.numeric(treat*as.numeric(year-death_year == 9)),
+         dumm10 = as.numeric(treat*as.numeric(year-death_year == 10)),
+         dumm11 = as.numeric(treat*as.numeric(year-death_year >= 11))) %>% 
+  mutate(dumm_cmn_11 = as.numeric(year-death_year <= -11),
+         dumm_cmn_10 = as.numeric(year-death_year == -10),
+         dumm_cmn_9 = as.numeric(year-death_year == -9),
+         dumm_cmn_8 = as.numeric(year-death_year == -8),
+         dumm_cmn_7 = as.numeric(year-death_year == -7),
+         dumm_cmn_6 = as.numeric(year-death_year == -6),
+         dumm_cmn_5 = as.numeric(year-death_year == -5),
+         dumm_cmn_4 = as.numeric(year-death_year == -4),
+         dumm_cmn_3 = as.numeric(year-death_year == -3),
+         dumm_cmn_2 = as.numeric(year-death_year == -2),
+         dumm_cmn_1 = as.numeric(year-death_year == -1),
+         dumm_cmn_0 = as.numeric(year-death_year == 0),
+         dumm_cmn1 = as.numeric(year-death_year == 1),
+         dumm_cmn2 = as.numeric(year-death_year == 2),
+         dumm_cmn3 = as.numeric(year-death_year == 3),
+         dumm_cmn4 = as.numeric(year-death_year == 4),
+         dumm_cmn5 = as.numeric(year-death_year == 5),
+         dumm_cmn6 = as.numeric(year-death_year == 6),
+         dumm_cmn7 = as.numeric(year-death_year == 7),
+         dumm_cmn8 = as.numeric(year-death_year == 8),
+         dumm_cmn9 = as.numeric(year-death_year == 9),
+         dumm_cmn10 = as.numeric(year-death_year == 10),
+         dumm_cmn11 = as.numeric(year-death_year >= 11))
+
+```
+
+figure2_A
+
+```{r, echo=T}
+figure2_A <- feglm(nb_pmra_tcoauth ~ dumm1+dumm2+dumm3+dumm4+dumm5+dumm6+dumm7+dumm8+dumm9+dumm10+dumm11+
+                     dumm_1+dumm_2+dumm_3+dumm_4+dumm_5+dumm_6+dumm_7+dumm_8+dumm_9+dumm_10+dumm_11+
+                     dumm_cmn_1+dumm_cmn_2+dumm_cmn_3+dumm_cmn_4+dumm_cmn_5+dumm_cmn_6+dumm_cmn_7+dumm_cmn_8+dumm_cmn_9+dumm_cmn_10+dumm_cmn_11+
+                     dumm_cmn1+dumm_cmn2+dumm_cmn3+dumm_cmn4+dumm_cmn5+dumm_cmn6+dumm_cmn7+dumm_cmn8+dumm_cmn9+dumm_cmn10+dumm_cmn11
+                   | id+year+field_age,
+                   data = df,family = poisson(),vcov = ~ star_id,fixef.tol=1e-4,fixef.iter=500)
+```
+
+figure2_B
+
+```{r, echo=T}
+figure2_B <- feglm(nb_pmra_ycoauth ~ dumm1+dumm2+dumm3+dumm4+dumm5+dumm6+dumm7+dumm8+dumm9+dumm10+dumm11+
+                     dumm_1+dumm_2+dumm_3+dumm_4+dumm_5+dumm_6+dumm_7+dumm_8+dumm_9+dumm_10+dumm_11+
+                     dumm_cmn_1+dumm_cmn_2+dumm_cmn_3+dumm_cmn_4+dumm_cmn_5+dumm_cmn_6+dumm_cmn_7+dumm_cmn_8+dumm_cmn_9+dumm_cmn_10+dumm_cmn_11+
+                     dumm_cmn1+dumm_cmn2+dumm_cmn3+dumm_cmn4+dumm_cmn5+dumm_cmn6+dumm_cmn7+dumm_cmn8+dumm_cmn9+dumm_cmn10+dumm_cmn11
+                   | id+year+field_age,
+                   data = df,family = poisson(),vcov = ~ star_id,fixef.tol=1e-4,fixef.iter=500)
+
+```
+
+figure2_C
+
+```{r, echo=T}
+figure2_C <- feglm(nb_pmra_ncoauth ~ dumm1+dumm2+dumm3+dumm4+dumm5+dumm6+dumm7+dumm8+dumm9+dumm10+dumm11+
+                     dumm_1+dumm_2+dumm_3+dumm_4+dumm_5+dumm_6+dumm_7+dumm_8+dumm_9+dumm_10+dumm_11+
+                     dumm_cmn_1+dumm_cmn_2+dumm_cmn_3+dumm_cmn_4+dumm_cmn_5+dumm_cmn_6+dumm_cmn_7+dumm_cmn_8+dumm_cmn_9+dumm_cmn_10+dumm_cmn_11+
+                     dumm_cmn1+dumm_cmn2+dumm_cmn3+dumm_cmn4+dumm_cmn5+dumm_cmn6+dumm_cmn7+dumm_cmn8+dumm_cmn9+dumm_cmn10+dumm_cmn11
+                   | id+year+field_age,
+                   data = df,family = poisson(),vcov = ~ star_id,fixef.tol=1e-4,fixef.iter=500)
+```
+
+```{r, echo=F}
+df_tmpA <- data.frame(figure2_A[["coefficients"]][1:22],figure2_A[["se"]][1:22]) %>% 
+  rename(se = figure2_A...se....1.22.,Estimate = figure2_A...coefficients....1.22.) %>% 
+  mutate(ymin = Estimate - 1.961*se,
+         ymax = Estimate + 1.961*se,
+         year = c(1,2,3,4,5,6,7,8,9,10,11,-1,-2,-3,-4,-5,-6,-7,-8,-9,-10,-11))
+df_tmpA<- df_tmpA[-c(11,22),]
+df_tmpB <- data.frame(figure2_B[["coefficients"]][1:22],figure2_B[["se"]][1:22]) %>% 
+  rename(se = figure2_B...se....1.22.,Estimate = figure2_B...coefficients....1.22.) %>% 
+  mutate(ymin = Estimate - 1.961*se,
+         ymax = Estimate + 1.961*se,
+         year = c(1,2,3,4,5,6,7,8,9,10,11,-1,-2,-3,-4,-5,-6,-7,-8,-9,-10,-11))
+df_tmpB<- df_tmpB[-c(11,22),]
+df_tmpC <- data.frame(figure2_C[["coefficients"]][1:22],figure2_C[["se"]][1:22]) %>% 
+  rename(se = figure2_C...se....1.22.,Estimate = figure2_C...coefficients....1.22.) %>% 
+  mutate(ymin = Estimate - 1.961*se,
+         ymax = Estimate + 1.961*se,
+         year = c(1,2,3,4,5,6,7,8,9,10,11,-1,-2,-3,-4,-5,-6,-7,-8,-9,-10,-11))
+df_tmpC<- df_tmpC[-c(11,22),]
+```
+
+```{r, echo=F}
+pA <- ggplot(data = df_tmpA, 
+             aes(x = year, y = Estimate)) +
+  geom_hline(yintercept = seq(-0.6, 0.5, by = 0.1),color="grey")+
+  geom_segment(aes(x = year, xend = year, 
+                   y = ymin, yend = ymax),color = "grey",size = 2) +
+  geom_point(size = 3, color = "darkgrey") +
+  geom_point(x = 0,y = 0,size = 3, color = "darkgrey") +
+  geom_hline(yintercept = 0, lwd = 0.2) +
+  geom_vline(xintercept = 0, lwd = 0.2,linetype = "dashed",color = "grey") +
+  scale_x_continuous(limits = c(-10, 10),breaks = seq(-10, 10, by = 1)) + 
+  scale_y_continuous(limits = c(-0.63, 0.5),breaks = seq(-0.6, 0.5,by = 0.1),labels = scales::comma)+
+  theme_classic2() + 
+  theme(axis.title.y = element_blank()) +
+  xlab("Time to/after death")
+pB <- ggplot(data = df_tmpB, 
+             aes(x = year, y = Estimate)) +
+  geom_hline(yintercept = seq(-0.6, 0.5, by = 0.1),color="grey")+
+  geom_segment(aes(x = year, xend = year, 
+                   y = ymin, yend = ymax),color = "grey",size = 2) +
+  geom_point(size = 3, color = "darkgrey") +
+  geom_point(x = 0,y = 0,size = 3, color = "darkgrey") +
+  geom_hline(yintercept = 0, lwd = 0.2) +
+  geom_vline(xintercept = 0, lwd = 0.2,linetype = "dashed",color = "grey") +
+  scale_x_continuous(limits = c(-10, 10),breaks = seq(-10, 10, by = 1)) + 
+  scale_y_continuous(limits = c(-0.63, 0.5),breaks = seq(-0.6, 0.5,by = 0.1),labels = scales::comma)+
+  theme_classic2() + 
+  theme(axis.title.y = element_blank()) +
+  xlab("Time to/after death")
+pC <- ggplot(data = df_tmpC, 
+             aes(x = year, y = Estimate)) +
+  geom_hline(yintercept = seq(-0.6, 0.5, by = 0.1),color="grey")+
+  geom_segment(aes(x = year, xend = year, 
+                   y = ymin, yend = ymax),color = "grey",size = 2) +
+  geom_point(size = 3, color = "darkgrey") +
+  geom_point(x = 0,y = 0,size = 3, color = "darkgrey") +
+  geom_hline(yintercept = 0, lwd = 0.2) +
+  geom_vline(xintercept = 0, lwd = 0.2,linetype = "dashed",color = "grey") +
+  scale_x_continuous(limits = c(-10, 10),breaks = seq(-10, 10, by = 1)) + 
+  scale_y_continuous(limits = c(-0.63, 0.5),breaks = seq(-0.6, 0.5,by = 0.1),labels = scales::comma)+
+  theme_classic2() + 
+  theme(axis.title.y = element_blank()) +
+  xlab("Time to/after death")
+Fig1 <- ggarrange(pA, pB, pC, 
+                  nrow = 1,
+                  labels = c('Panel A. All authors',
+                             'Panel B. Collaborators',
+                             'Panel C. Non-collaborators'),
+                  #hjust = -0.25,
+                  #common.legend = TRUE,
+                  font.label = list(size = 12))
+```
+---
+## table6
+
+```{r echo=FALSE,message=FALSE}
+library(dplyr)
+library(labelled)
+library(fixest)
+library(haven)
+library(etable)
+library(tinytex)
+library(AER)
+library(scales)
+#setwd("Y:/2.skd/2.schumpeter/bigdata_econ/Replication")
+df <- read_dta("116188-V1/data/aer_2016-1574_replication_set.dta")
+
+df <- set_variable_labels(df,after_death = "After Death")
+df <- df %>% 
+  mutate(allcod=(cod<=3)) %>% 
+  mutate(after_death_cmmn = (year>death_year)) %>% 
+  mutate(antcpt=(cod==1)) %>% 
+  mutate(sudden=(cod==2)) %>% 
+  mutate(upr_strs=(index_cites>10)) %>% 
+  filter(allcod==1)
+
+# table6
+df6_c1_1 <- df[df$index_pubs<=10,]
+df6_c1_2 <- df[df$index_pubs>10,]
+df6_c2_1 <- df[df$index_cites<=10,]
+df6_c2_2 <- df[df$index_cites>10,]
+df6_c3_1 <- df[df$index_amount<=10 & !is.na(df$index_amount),]
+df6_c3_2 <- df[df$index_amount>10 & !is.na(df$index_amount),]
+df6_c4_1 <- df[df$index_imprtnc<=10,]
+df6_c4_2 <- df[df$index_imprtnc>10,]
+
+Number_of_investigators <- c()
+Number_of_fields <- c()
+Number_of_field_year_obs <- c()
+log_likelihood <- c()
+
+for (i in 1:4){
+  for (j in 1:2){
+    assign(paste("table6_c",i,"_",j,sep = ""), feglm(nb_pmra_ncoauth ~ after_death + after_death_cmmn | id+year+field_age, data = get(paste("df6_c",i,"_",j,sep = "")),family = poisson(),vcov = ~ star_id,fixef.tol=1e-4,fixef.iter=500))
+    n <-  get(paste("table6_c",i,"_",j,sep = ""))
+    df_c <- get(paste("df6_c",i,"_",j,sep = ""))
+    if(is.null(n[["obs_selection"]][["obsRemoved"]])){
+      Number_of_investigators <- c(Number_of_investigators,n_distinct(df_c$star_id))
+    }else{
+      Number_of_investigators <- c(Number_of_investigators,n_distinct(df_c[n[["obs_selection"]][["obsRemoved"]],]$star_id))
+    }
+    Number_of_fields <- c(Number_of_fields, as.character(unname(n$fixef_sizes["id"])))
+    Number_of_field_year_obs <- c(Number_of_field_year_obs, n[["nobs"]])
+    log_likelihood <- c(log_likelihood, as.integer(n[["loglik"]]))
+  }
+}
+
+
+latexcode_6 <- etable(table6_c1_1, table6_c1_2,table6_c2_1,table6_c2_2,table6_c3_1,table6_c3_2,table6_c4_1,table6_c4_2,
+          title = "Table 6—Breakdown by Star Scientist Characteristics",
+       digits = "r3",
+       tex = TRUE,
+       replace = TRUE,
+       fitstat=c('n', 'll'),
+       se.row=FALSE,
+       se.below=TRUE,
+       drop ='after_death_cmmnTRUE',
+       dict=c(after_death="After death"),
+       signif.code=NA,
+       float = TRUE,
+       headers=list("- " =list('Below median'=1,'Above median'=1,'Below median'=1,'Above median'=1,'Below median'=1,'Above median'=1,'Below median'=1,'Above median'=1),"^ "=list("Publications"=2,"Citations"=2,"Funding"=2,"Importance to the field"=2)),
+       depvar= FALSE,
+       extralines = list("Number of investigators"=Number_of_investigators,"_Number of fields"=Number_of_fields,"_Number of field-year obs."=Number_of_field_year_obs,"_log likelihood"=log_likelihood),
+       drop.section=c("fixef" ,"stats"),
+       style.tex=style.tex("aer",line.top="double",var.title = ""),
+       
+       notes = "\\footnotesize \\tiny \\textit{Notes}: Estimates stem from conditional (subfield) fixed effects Poisson specifications. The dependent variable is the total number of publications by non-collaborators in a subfield in a particular year. Each pair of columns splits the sample across the median of a particular covariate for the sample of fields (treated and control) in the baseline year. The table examines differences in the extent to which the eminence of the star at death (respectively counterfactual year of death for controls) influences the rate at which non-collaborators enter the field after the star passes away. Eminence is measured through the star’s cumulative number of publications, the star’s cumulative number of citations garnered up to the year of death, and the star’s cumulative amount of NIH funding. We also have a “local” measure of eminence: the star’s importance to the field, which is defined as the proportion of articles in the subfield up to the year of death for which the star is an author. All models incorporate a full suite of year effects and subfield age effects, as well as a term common to both treated and control subfields that switches from 0 to 1 after the death of the star. Exponentiating the coefficients and differencing from one yield numbers interpretable as elasticities. For example, the estimate in the second column implies that treated subfields see an increase in the number of contributions by non-collaborators after the superstar passes away, a statistically significant 100 × (exp[0.116] − 1) = 12.30%. Robust standard errors in parentheses, clustered at the level of the star scientist.")
+latexcode_6 <- gsub("\\\\caption", "\\\\caption\\*", latexcode_6)
+latexcode_6 <- gsub("& \\(1\\)\\s+& \\(2\\)\\s+& \\(3\\)\\s+& \\(4\\)\\s+& \\(5\\)\\s+& \\(6\\)\\s+& \\(7\\)\\s+& \\(8\\)", "", latexcode_6)
+```
+---
+
+## table7
+
+```{r echo=FALSE}
+df <- df %>% filter(upr_strs==1)
+df7a_c1_1 <- df[df$index_crwd_sbfld<=50,]
+df7a_c1_2 <- df[df$index_crwd_sbfld>50,]
+df7a_c2_1 <- df[df$index_avg_field_slf_rfrntl>5,]
+df7a_c2_2 <- df[df$index_avg_field_slf_rfrntl<=5 & !is.na(df$index_avg_field_slf_rfrntl),]
+df7a_c3_1 <- df[df$index_clqshnss<=10 & !is.na(df$index_clqshnss),]
+df7a_c3_2 <- df[df$index_clqshnss>10,]
+
+Number_of_investigators <- c()
+Number_of_fields <- c()
+Number_of_field_year_obs <- c()
+log_likelihood <- c()
+
+for (i in 1:3){
+  for (j in 1:2){
+    df7a_c <- get(paste("df7a_c",i,"_",j,sep = ""))
+    assign(paste("table7a_c",i,"_",j,sep = ""), feglm(nb_pmra_ncoauth ~ after_death + after_death_cmmn | id+year+field_age, data = df7a_c,family = poisson(),vcov = ~ star_id,fixef.tol=1e-4,fixef.iter=500))
+    n <-  get(paste("table7a_c",i,"_",j,sep = ""))
+    if(is.null(n[["obs_selection"]][["obsRemoved"]])){
+      Number_of_investigators <- c(Number_of_investigators,n_distinct(df7a_c$star_id))
+    }else{
+      Number_of_investigators <- c(Number_of_investigators,n_distinct(df7a_c[n[["obs_selection"]][["obsRemoved"]],]$star_id))
+    }
+    Number_of_fields <- c(Number_of_fields, as.character(unname(n$fixef_sizes["id"])))
+    Number_of_field_year_obs <- c(Number_of_field_year_obs, n[["nobs"]])
+    log_likelihood <- c(log_likelihood, as.integer(n[["loglik"]]))
+  }
+}
+
+
+latexcode_7a <- etable(table7a_c1_1, table7a_c1_2,table7a_c2_1,table7a_c2_2,table7a_c3_1,table7a_c3_2,
+       title = "Table 7—The Nature of Entry Barriers",
+       digits = "r3",
+       tex = TRUE,
+       replace = TRUE,
+       fitstat=c('n', 'll'),
+       se.row=FALSE,
+       se.below=TRUE,
+       drop ='after_death_cmmnTRUE',
+       dict=c(after_death="After death"),
+       signif.code=NA,
+       float = TRUE,
+       headers=list("- " =list('Below median'=1,'Above median'=1,'Below median'=1,'Above median'=1,'Below median'=1,'Above median'=1),"^ "=list("PMRA-based definition"=2,"Citation-based definition"=2,"Cliquishness"=2)),
+       depvar= FALSE,
+       extralines = list("Number of investigators"=Number_of_investigators,"_Number of fields"=Number_of_fields,"_Number of field-year obs."=Number_of_field_year_obs,"_log likelihood"=log_likelihood),
+       drop.section=c("fixef" ,"stats"),
+       style.tex=style.tex("aer",line.top="double",var.title = "")
+)
+
+df7b_c1_1 <- df[df$index_clgs_edtrls<=10,]
+df7b_c1_2 <- df[df$index_clgs_edtrls>10,]
+df7b_c2_1 <- df[df$index_clgs_on_ss==1,]
+df7b_c2_2 <- df[df$index_clgs_on_ss>1,]
+df7b_c3_1 <- df[df$index_frac_collabs_field_nih<=45,]
+df7b_c3_2 <- df[df$index_frac_collabs_field_nih>45,]
+
+Number_of_investigators <- c()
+Number_of_fields <- c()
+Number_of_field_year_obs <- c()
+log_likelihood <- c()
+
+for (i in 1:3){
+  for (j in 1:2){
+    df7b_c <- get(paste("df7b_c",i,"_",j,sep = ""))
+    assign(paste("table7b_c",i,"_",j,sep = ""), feglm(nb_pmra_ncoauth ~ after_death + after_death_cmmn | id+year+field_age, data = df7b_c,family = poisson(),vcov = ~ star_id,fixef.tol=1e-4,fixef.iter=500))
+    n <-  get(paste("table7b_c",i,"_",j,sep = ""))
+    if(is.null(n[["obs_selection"]][["obsRemoved"]])){
+      Number_of_investigators <- c(Number_of_investigators,n_distinct(df7b_c$star_id))
+    }else{
+      Number_of_investigators <- c(Number_of_investigators,n_distinct(df7b_c[n[["obs_selection"]][["obsRemoved"]],]$star_id))
+    }
+    Number_of_fields <- c(Number_of_fields, as.character(unname(n$fixef_sizes["id"])))
+    Number_of_field_year_obs <- c(Number_of_field_year_obs, n[["nobs"]])
+    log_likelihood <- c(log_likelihood, as.integer(n[["loglik"]]))
+  }
+}
+
+
+latexcode_7b <- etable(table7b_c1_1, table7b_c1_2,table7b_c2_1,table7b_c2_2,table7b_c3_1,table7b_c3_2,
+                       digits = "r3",
+                       title = "",
+                       tex = TRUE,
+                       replace = TRUE,
+                       fitstat=c('n', 'll'),
+                       se.row=FALSE,
+                       se.below=TRUE,
+                       drop ='after_death_cmmnTRUE',
+                       dict=c(after_death="After death"),
+                       signif.code=NA,
+                       float = TRUE,
+                       headers=list("- " =list('Below median'=1,'Above median'=1,'Below median'=1,'Above median'=1,'Below median'=1,'Above median'=1),"^ "=list("Editorial channel"=2,"NIH study section channel"=2,"Fraction of subfield NIH funding"=2)),
+                       depvar= FALSE,
+                       extralines = list("Number of investigators"=Number_of_investigators,"_Number of fields"=Number_of_fields,"_Number of field-year obs."=Number_of_field_year_obs,"_log likelihood"=log_likelihood),
+                       drop.section=c("fixef" ,"stats"),
+                       style.tex=style.tex("aer",line.top="double",var.title = ""),
+                       notes = "\\footnotesize \\tiny \\textit{Notes}: Estimates stem from conditional (subfield) fixed effects Poisson specifications. The dependent variable is the total number of publications by non-collaborators in a subfield in a particular year. The sample is limited to the subfields in which the most eminent among the stars were active (specifically, above the median of the “cumulative citations up to the year of death” metric). Each pair of columns splits the sample across the median of a particular covariate for the sample of subfields (treated and control) in the baseline year. For example, the first two columns of panel B compare the magnitude of the treatment effect for stars whose collaborators have written an above-median number of editorials in the five years preceding the superstar’s death, versus a below-median number of editorials. All models incorporate a full suite of year effects and subfield age effects, as well as a term common to both treated and control subfields that switches from 0 to 1 after the death of the star. Exponentiating the coefficients and differencing from one yield numbers interpretable as elasticities. For example, the estimates in the first column of panel B imply that treated subfields see an increase in the number of contributions by non-collaborators after the superstar passes away, a statistically significant 100 × (exp[0.147] − 1) = 15.84%. Robust standard errors in parentheses, clustered at the level of the star scientist."
+)
+
+latex_header <- "
+\\documentclass{article}
+\\usepackage{graphicx}
+\\usepackage{booktabs}
+\\usepackage{caption}
+\\usepackage{makecell}
+\\begin{document}
+"
+
+latex_footer <- "\\end{table}
+\\end{document}"
+
+
+latexcode_7a <- gsub("\\\\end\\{table\\}", "", latexcode_7a)
+latexcode_7a <- gsub("\\\\caption", "\\\\caption\\*", latexcode_7a)
+latexcode_7a <- gsub("\\\\bottomrule", "", latexcode_7a)
+latexcode_7a <- gsub("& \\(1\\)\\s+& \\(2\\)\\s+& \\(3\\)\\s+& \\(4\\)\\s+& \\(5\\)\\s+& \\(6\\)", "\\\\textit\\{Panel A. Subfield coherence\\}", latexcode_7a)
+latexcode_7b <- gsub("\\\\begin\\{table\\}\\[htbp\\]", "", latexcode_7b)
+latexcode_7b <- gsub("\\\\tabularnewline \\\\midrule \\\\midrule", "", latexcode_7b)
+latexcode_7b <- gsub("\\\\caption", "\\\\caption\\*", latexcode_7b)
+latexcode_7b <- gsub("\\\\bigskip", "", latexcode_7b)
+latexcode_7b <- gsub("& \\(1\\)\\s+& \\(2\\)\\s+& \\(3\\)\\s+& \\(4\\)\\s+& \\(5\\)\\s+& \\(6\\)", "\\\\textit\\{Panel B. Indirect control through collaborators\\}", latexcode_7b)
+latexcode_7b <- gsub("\\\\end\\{table\\}", "", latexcode_7b)
+
+latexcode <- c(
+  latex_header,
+  latexcode_6,
+  latexcode_7a,
+  latexcode_7b,
+  latex_footer
+)
+
+writeLines(latexcode, "tableD.tex")
+```
+---
+
+## table4
+
+```{r echo=FALSE,warning=FALSE,cache=TRUE,message=FALSE}
+library(dplyr)
+library(fixest)
+library(haven)
+library(etable)
+library(tinytex)
+library(AER)
+library(scales)
+library(labelled)
+library(pander)
+library(stargazer)
+
+setwd("D:/OneDrive - University of Sussex/bigData_in_Econ/test/assignment9/116188-V1/data")
+
+df <- read_dta("aer_2016-1574_replication_set.dta")
+attr(df[["after_death"]], "label") <- "After Death"
+df <- mutate(df,after_death_cmmn = (year>death_year))
+df <- mutate(df,allcod=(cod<=3))
+
+table4_c1 <- feglm(nb_pmra_ncoauth ~ after_death + after_death_cmmn | id+year+field_age, data = df,family = poisson(),vcov = ~ star_id,fixef.tol=1e-4,fixef.iter=500)
+table4_c2 <- feglm(nb_pmra_qrt1_ncoauth ~ after_death + after_death_cmmn | id+year+field_age, data = df,family = poisson(),vcov = ~ star_id,fixef.tol=1e-4,fixef.iter=500)
+table4_c3 <- feglm(nb_pmra_qrt2_ncoauth ~ after_death + after_death_cmmn | id+year+field_age, data = df,family = poisson(),vcov = ~ star_id,fixef.tol=1e-4,fixef.iter=500)
+table4_c4 <- feglm(nb_pmra_qrt3_ncoauth ~ after_death + after_death_cmmn | id+year+field_age, data = df,family = poisson(),vcov = ~ star_id,fixef.tol=1e-4,fixef.iter=500)
+table4_c5 <- feglm(nb_pmra_75to95_ncoauth ~ after_death + after_death_cmmn | id+year+field_age, data = df,family = poisson(),vcov = ~ star_id,fixef.tol=1e-4,fixef.iter=500)
+table4_c6 <- feglm(nb_pmra_95to99_ncoauth ~ after_death + after_death_cmmn | id+year+field_age, data = df,family = poisson(),vcov = ~ star_id,fixef.tol=1e-4,fixef.iter=500)
+table4_c7 <- feglm(nb_pmra_abv99_ncoauth ~ after_death + after_death_cmmn | id+year+field_age, data = df,family = poisson(),vcov = ~ star_id,fixef.tol=1e-4,fixef.iter=500)
+
+Number_of_investigators <- c()
+for(i in c("table4_c1",'table4_c2','table4_c3','table4_c4','table4_c5','table4_c6', 'table4_c7')){
+  i = get(i)
+  if(is.null(i[["obs_selection"]][["obsRemoved"]])){
+    Number_of_investigators <- c(Number_of_investigators,  as.character(n_distinct(df$star_id)))
+  }else{
+    Number_of_investigators <- c(Number_of_investigators, as.character(n_distinct(df[i[["obs_selection"]][["obsRemoved"]],]$star_id)))
+  }
+}
+
+Number_of_fields <- c()
+Number_of_fields <- c(Number_of_fields,as.character(unique(table4_c1$fixef_sizes["id"])))
+Number_of_fields <- c(Number_of_fields,as.character(unique(table4_c2$fixef_sizes["id"])))
+Number_of_fields <- c(Number_of_fields,as.character(unique(table4_c3$fixef_sizes["id"])))
+Number_of_fields <- c(Number_of_fields,as.character(unique(table4_c4$fixef_sizes["id"])))
+Number_of_fields <- c(Number_of_fields,as.character(unique(table4_c5$fixef_sizes["id"])))
+Number_of_fields <- c(Number_of_fields,as.character(unique(table4_c6$fixef_sizes["id"])))
+Number_of_fields <- c(Number_of_fields,as.character(unique(table4_c7$fixef_sizes["id"])))
+
+Number_of_field_year_obs <- c()
+Number_of_field_year_obs <- c(Number_of_field_year_obs,as.character(unique(table4_c1$nobs)))
+Number_of_field_year_obs <- c(Number_of_field_year_obs,as.character(unique(table4_c2$nobs)))
+Number_of_field_year_obs <- c(Number_of_field_year_obs,as.character(unique(table4_c3$nobs)))
+Number_of_field_year_obs <- c(Number_of_field_year_obs,as.character(unique(table4_c4$nobs)))
+Number_of_field_year_obs <- c(Number_of_field_year_obs,as.character(unique(table4_c5$nobs)))
+Number_of_field_year_obs <- c(Number_of_field_year_obs,as.character(unique(table4_c6$nobs)))
+Number_of_field_year_obs <- c(Number_of_field_year_obs,as.character(unique(table4_c7$nobs)))
+
+log_likelihood <- c()
+log_likelihood <- c(log_likelihood,as.character(as.integer(table4_c1$loglik)))
+log_likelihood <- c(log_likelihood,as.character(as.integer(table4_c2$loglik)))
+log_likelihood <- c(log_likelihood,as.character(as.integer(table4_c3$loglik)))
+log_likelihood <- c(log_likelihood,as.character(as.integer(table4_c4$loglik)))
+log_likelihood <- c(log_likelihood,as.character(as.integer(table4_c5$loglik)))
+log_likelihood <- c(log_likelihood,as.character(as.integer(table4_c6$loglik)))
+log_likelihood <- c(log_likelihood,as.character(as.integer(table4_c7$loglik)))
+
+table4 <- etable(table4_c1, table4_c2,table4_c3,table4_c4,table4_c5,table4_c6,table4_c7,
+       title = "Table 4—Scientific Impact of Entry",
+       digits = "r3",
+       tex = TRUE,
+       #file = "table4.tex",
+       #replace = TRUE,
+       fitstat=c('n', 'll'),
+       se.row=FALSE,
+       se.below=TRUE,
+       drop ='after_death_cmmnTRUE',
+       dict=c(after_death="After death"),
+       signif.code=NA,
+       float = TRUE,
+       headers=list("^ "=list("Vintage-specific long-run citation quantile"=1), "- " =list('All pubs'=1,'Bottom quartile'=1,'2nd quartile'=1,'3rd quartile'=1, 'Btw. 75th and 95th percentile'=1,'Btw. 95th and 99th percentile'=1, 'Above 99th percentile'=1)),
+       depvar= FALSE,
+       extralines = list("Number of investigators"=Number_of_investigators,"_Number of fields"=Number_of_fields,"_Number of field-year obs."=Number_of_field_year_obs,"_log likelihood"=log_likelihood),
+       drop.section=c("fixef" ,"stats"),
+       style.tex=style.tex(main = "aer",line.top="double",var.title = ""),
+       notes = "\\footnotesize \\tiny \\textit{Notes}: Notes: Estimates stem from conditional (subfield) fixed effects Poisson specifications. The dependent variable is the total number of publications by non-collaborators in a subfield in a particular year, where these publications fall in a particular quantile bin of the long-run, vintage-adjusted citation distribution for the universe of journal articles in PubMed. All models incorporate a full suite of year effects and subfield age effects, as well as a term common to both treated and control subfields that switches from 0 to 1 after the death of the star. Exponentiating the coefficients and differencing from one yield numbers interpretable as elasticities. For example, the estimates in column 1, panel A imply that treated subfields see an increase in the number of contributions by non-collaborators after the superstar passes away, a statistically significant 100 × (exp[0.082] − 1) = 8.55%. Robust standard errors in paren- theses, clustered at the level of the star scientist.")
+
+table4 <- gsub("& \\(1\\)\\s+& \\(2\\)\\s+& \\(3\\)\\s+& \\(4\\)\\s+& \\(5\\)\\s+& \\(6\\)\\s+& \\(7\\)", "", table4)
+writeLines(table4, "table4.tex")
+
+```
+---
+
+## table5
+
+```{r echo=FALSE,cache=TRUE} 
+table5_5a_c1 <- feglm(nb_pmra_hi_prxmt_crdnl_ncoauth ~ after_death + after_death_cmmn | id+year+field_age, data = df,family = poisson(),vcov = ~ star_id,fixef.tol=1e-4,fixef.iter=500)
+table5_5a_c2 <- feglm(nb_pmra_lo_prxmt_crdnl_ncoauth ~ after_death + after_death_cmmn | id+year+field_age, data = df,family = poisson(),vcov = ~ star_id,fixef.tol=1e-4,fixef.iter=500)
+table5_5a_c3 <- feglm(nb_pmra_hi_prxmt_ordnl_ncoauth ~ after_death + after_death_cmmn | id+year+field_age, data = df,family = poisson(),vcov = ~ star_id,fixef.tol=1e-4,fixef.iter=500)
+table5_5a_c4 <- feglm(nb_pmra_lo_prxmt_ordnl_ncoauth ~ after_death + after_death_cmmn | id+year+field_age, data = df,family = poisson(),vcov = ~ star_id,fixef.tol=1e-4,fixef.iter=500)
+table5_5b_c1 <- feglm(nb_pmra_nciteinfield_ncoauth ~ after_death + after_death_cmmn | id+year+field_age, data = df,family = poisson(),vcov = ~ star_id,fixef.tol=1e-4,fixef.iter=500)
+table5_5b_c2 <- feglm(nb_pmra_yciteinfield_ncoauth ~ after_death + after_death_cmmn | id+year+field_age, data = df,family = poisson(),vcov = ~ star_id,fixef.tol=1e-4,fixef.iter=500)
+table5_5b_c3 <- feglm(nb_pmra_ycitethestar_ncoauth ~ after_death + after_death_cmmn | id+year+field_age, data = df,family = poisson(),vcov = ~ star_id,fixef.tol=1e-4,fixef.iter=500)
+table5_5b_c4 <- feglm(nb_pmra_ncitethestar_ncoauth ~ after_death + after_death_cmmn | id+year+field_age, data = df,family = poisson(),vcov = ~ star_id,fixef.tol=1e-4,fixef.iter=500)
+table5_5c_c1 <- feglm(nb_pmra_lo_refs_vntg_ncoauth ~ after_death + after_death_cmmn | id+year+field_age, data = df,family = poisson(),vcov = ~ star_id,fixef.tol=1e-4,fixef.iter=500)
+table5_5c_c2 <- feglm(nb_pmra_hi_refs_vntg_ncoauth ~ after_death + after_death_cmmn | id+year+field_age, data = df,family = poisson(),vcov = ~ star_id,fixef.tol=1e-4,fixef.iter=500)
+table5_5c_c3 <- feglm(nb_pmra_lo_2wy_mesh_vntg_ncoauth ~ after_death + after_death_cmmn | id+year+field_age, data = df,family = poisson(),vcov = ~ star_id,fixef.tol=1e-4,fixef.iter=500)
+table5_5c_c4 <- feglm(nb_pmra_hi_2wy_mesh_vntg_ncoauth ~ after_death + after_death_cmmn | id+year+field_age, data = df,family = poisson(),vcov = ~ star_id,fixef.tol=1e-4,fixef.iter=500)
+# 后缀列表
+suffixes <- c("5a", "5b", "5c")
+
+# 对每个后缀进行循环
+for (suffix in suffixes) {
+  # 动态构建表格名称并将它们添加到列表中
+  tables <- lapply(1:4, function(i) get(paste0("table5_", suffix, "_c", i)))
+  
+  # 初始化向量
+  Number_of_fields <- c()
+  Number_of_field_year_obs <- c()
+  log_likelihood <- c()
+  Number_of_investigators <- c()
+  
+  # 遍历每个表格，提取数据
+  for (table in tables) {
+    Number_of_fields <- c(Number_of_fields, as.character(unique(table$fixef_sizes["id"])))
+    Number_of_field_year_obs <- c(Number_of_field_year_obs, as.character(unique(table$nobs)))
+    log_likelihood <- c(log_likelihood, as.character(as.integer(table$loglik)))
+    
+    # 处理 Number_of_investigators
+    if(is.null(table[["obs_selection"]][["obsRemoved"]])) {
+      Number_of_investigators <- c(Number_of_investigators, as.character(n_distinct(df$star_id)))
+    } else {
+      Number_of_investigators <- c(Number_of_investigators, as.character(n_distinct(df[table[["obs_selection"]][["obsRemoved"]],]$star_id)))
+    }
+  }
+  
+  # 将结果赋值到动态变量名
+  assign(paste0("Number_of_fields_", suffix), Number_of_fields)
+  assign(paste0("Number_of_field_year_obs_", suffix), Number_of_field_year_obs)
+  assign(paste0("log_likelihood_", suffix), log_likelihood)
+  assign(paste0("Number_of_investigators_", suffix), Number_of_investigators)
+}
+```
+
+
+```{r echo=F} 
+table5_5a <- etable(table5_5a_c1, table5_5a_c2,table5_5a_c3,table5_5a_c4,
+                          title = "Table 5—Entry and Research Direction",
+                          digits = "r3",
+                          tex = TRUE,
+                          #file = "table4.tex",
+                          #replace = TRUE,
+                          fitstat=c('n', 'll'),
+                          se.row=FALSE,
+                          se.below=TRUE,
+                          drop ='after_death_cmmnTRUE',
+                          dict=c(after_death="After death"),
+                          signif.code=NA,
+                          float = TRUE,
+                          headers= list("^ "=list("Cardinal measure"=2, "Ordinal measure"=2), "- " =list('Intellectual proximate articles'=1,'Intellectual distant articles'=1,'Intellectual proximate articles'=1,'Intellectual distant articles'=1)),
+                          depvar= FALSE,
+                          extralines = list("Number of investigators"=Number_of_investigators_5a,"_Number of fields"=Number_of_fields_5a,"_Number of field-year obs."=Number_of_field_year_obs_5a,"_log likelihood"=log_likelihood_5a),
+                          drop.section=c("fixef" ,"stats"),
+                          style.tex=style.tex(main = "aer",line.top="double",var.title = "")
+       )
+
+
+table5_5b <- etable(table5_5b_c1, table5_5b_c2,table5_5b_c3,table5_5b_c4,
+                    digits = "r3",
+                    tex = TRUE,
+                    #file = "table4.tex",
+                    #replace = TRUE,
+                    fitstat=c('n', 'll'),
+                    se.row=FALSE,
+                    se.below=TRUE,
+                    drop ='after_death_cmmnTRUE',
+                    dict=c(after_death="After death"),
+                    signif.code=NA,
+                    float = TRUE,
+                    headers= list("^ "=list("In-field versus out-of-field references"=2, "Backward citations to the star’s bibliome"=2), "- " =list('With in-field references'=1,'Without in-field references'=1,'With references to the star'=1,'Without references to the star'=1)),
+                    depvar= FALSE,
+                    extralines = list("Number of investigators"=Number_of_investigators_5b,"_Number of fields"=Number_of_fields_5b,"_Number of field-year obs."=Number_of_field_year_obs_5b,"_log likelihood"=log_likelihood_5b),
+                    drop.section=c("fixef" ,"stats"),
+                    style.tex=style.tex(main = "aer",line.top="double",var.title = "")
+)
+
+table5_5c <- etable(table5_5c_c1, table5_5c_c2,table5_5c_c3,table5_5c_c4,
+                    digits = "r3",
+                    tex = TRUE,
+                    #file = "table4.tex",
+                    #replace = TRUE,
+                    fitstat=c('n', 'll'),
+                    se.row=FALSE,
+                    se.below=TRUE,
+                    drop ='after_death_cmmnTRUE',
+                    dict=c(after_death="After death"),
+                    signif.code=NA,
+                    float = TRUE,
+                    headers= list("^ "=list("Vintage of cited references"=2, "Vintage of 2-way MeSH term combinations"=2), "- " =list('Young'=1,'Old'=1,'Young'=1,'Old'=1)),
+                    depvar= FALSE,
+                    extralines = list("Number of investigators"=Number_of_investigators_5c,"_Number of fields"=Number_of_fields_5c,"_Number of field-year obs."=Number_of_field_year_obs_5c,"_log likelihood"=log_likelihood_5c),
+                    drop.section=c("fixef" ,"stats"),
+                    style.tex=style.tex(main = "aer",line.top="double",var.title = "")
+                    #notes = "\\footnotesize \\textit{Notes}: Estimates stem from conditional (subfield) fixed effects Poisson specifications. In panel A, the dependent variable is the total number of publications by non-collaborators in a subfield in a particular year, where these pub- lications can either be proximate in intellectual space to the star’s source publication, or more distant (in the PMRA sense). Since PMRA generates both a cardinal and an ordinal measure of intellectual proximity, we parse the related articles using both measures, yielding a total of four different specifications. For the cardinal measure, a related article is deemed proximate if its similarity score is above 0.58, which corresponds to the median of relatedness in the sample. For the ordinal measure, a related article is deemed proximate if its similarity rank is below 90, which also corresponds to the median of similarity in the sample. In panel B, we focus on whether the content of entrants’ contributions in the subfield change after the superstar passes away. Each cited reference in a related article can either belong to the subfield, or fall outside of it; it can cite a publication of the star scientist associated with the subfield, or fail to cite any of the star’s past contributions. In panel C, the dependent variable is the total number of publications by non-collaborators in a subfield in a particular year, where these publications can either be “fresh” (citing young references, or being annotated by MeSH terms of recent vintage) or “stale” (citing old references, or being annotated by MeSH terms of distant vintage). All models incorporate a full suite of year effects and subfield age effects, as well as a term common to both treated and control subfields that switches from 0 to 1 after the death of the star. Exponentiating the coefficients and differencing from one yield numbers interpretable as elasticities. For example, the estimates in the first column of panel A imply that treated subfields see an increase in the number of PMRA-proximate contributions by non-collaborators after the superstar passes away, a statistically significant 100 × (exp[0.091] − 1) = 9.53%. Robust standard errors in parentheses, clustered at the level of the star scientist."
+)
+```
+
+```{r echo=F,cache=TRUE} 
+table5_5a <- gsub("\\\\end\\{table\\}", "", table5_5a)
+table5_5a <- gsub("\\\\caption", "\\\\caption\\*", table5_5a)
+table5_5a <- gsub("\\\\bottomrule", "", table5_5a)
+table5_5a <- gsub("& \\(1\\)\\s+& \\(2\\)\\s+& \\(3\\)\\s+& \\(4\\)", "\\\\textit\\{Panel A After death\\}", table5_5a)
+table5_5a <- gsub("multicolumn\\{2\\}\\{c\\}\\{Ordinal measure\\} \\\\\\\\", 
+                  "multicolumn\\{2\\}\\{c\\}\\{Ordinal measure\\}  \\\\\\\\ \\\\cmidrule(1r){2-3}\\\\cmidrule(1r){4-5}", 
+                  table5_5a)
+table5_5a <- gsub("Intellectual proximate articles \\& Intellectual distant articles \\& Intellectual proximate articles \\& Intellectual distant articles \\\\",
+                  "Intellectual proximate articles \\& Intellectual distant articles \\& Intellectual proximate articles \\& Intellectual distant articles \\\\\\\\\ \\\\midrule", table5_5a)
+table5_5a <- gsub("\\\\end\\{tabular\\}", "", table5_5a)
+table5_5a <- gsub("\\\\begin\\{tabular\\}\\{lcccc\\}", 
+                           "\\\\resizebox{\\\\linewidth}{!}{ \\\\begin{tabular}{lcccc}", 
+                  table5_5a)
+table5_5a <- gsub("Intellectual proximate articles", "\\{\\\\makecell\\[c\\]\\{Intellectual\\\\\\\\proximate \\\\\\\\ articles \\}\\}", table5_5a)
+table5_5a <- gsub("Intellectual distant articles", "\\{\\\\makecell\\[c\\]\\{Intellectual\\\\\\\\distant \\\\\\\\ articles \\}\\}", table5_5a)
+
+
+table5_5b <- gsub("\\\\end\\{table\\}", "", table5_5b)
+table5_5b <- gsub("\\\\begin\\{table\\}\\[htbp\\]", "", table5_5b)
+table5_5b <- gsub("\\\\tabularnewline \\\\midrule \\\\midrule", "", table5_5b)
+table5_5b <- gsub("\\\\caption", "\\\\caption\\*", table5_5b)
+table5_5b <- gsub("\\\\bigskip", "", table5_5b)
+table5_5b <- gsub("& \\(1\\)\\s+& \\(2\\)\\s+& \\(3\\)\\s+& \\(4\\)", "\\\\textit\\{Panel B After death\\}", table5_5b)
+table5_5b <- gsub("\\\\end\\{table\\}", "", table5_5b)
+table5_5b <- gsub("Backward citations to the star’s bibliome\\} \\\\\\\\", 
+                  "Backward citations to the star’s bibliome\\} \\\\\\\\ \\\\cmidrule(1r){2-3}\\\\cmidrule(1r){4-5}", 
+                  table5_5b)
+table5_5b <- gsub("With in-field references \\& Without in-field references \\& With references to the star \\& Without references to the star \\\\\\\\",
+                  "With in-field references \\& Without in-field references \\& With references to the star \\& Without references to the star \\\\\\\\ \\\\midrule", table5_5b)
+table5_5b <- gsub("\\\\begin\\{tabular\\}\\{lcccc\\}", "", table5_5b)
+table5_5b <- gsub("\\\\end\\{tabular\\}", "", table5_5b)
+
+table5_5b <- gsub("\\\\centering", "", table5_5b)
+table5_5b <- gsub("\\\\caption\\*\\{no title\\}", "", table5_5b)
+
+
+table5_5b <- gsub("In-field versus out-of-field references", "\\{\\\\makecell\\[c\\]\\{In-field versus\\\\\\\\out-of-field references\\}\\}", table5_5b)
+table5_5b <- gsub("Backward citations to the star’s bibliome", "\\{\\\\makecell\\[c\\]\\{Backward citations\\\\\\\\to the star’s bibliome\\}\\}", table5_5b)
+
+
+table5_5b <- gsub("With in-field references", "\\{\\\\makecell\\[c\\]\\{With\\\\\\\\in-field \\\\\\\\ references \\}\\}", table5_5b)
+table5_5b <- gsub("Without in-field references", "\\{\\\\makecell\\[c\\]\\{Without\\\\\\\\in-field \\\\\\\\ references \\}\\}", table5_5b)
+table5_5b <- gsub("With references to the star", "\\{\\\\makecell\\[c\\]\\{With\\\\\\\\references \\\\\\\\ to the star \\}\\}", table5_5b)
+table5_5b <- gsub("Without references to the star", "\\{\\\\makecell\\[c\\]\\{Without\\\\\\\\references \\\\\\\\ to the star \\}\\}", table5_5b)
+
+
+
+table5_5c <- gsub("\\\\begin\\{table\\}\\[htbp\\]", "", table5_5c)
+table5_5c <- gsub("\\\\tabularnewline \\\\midrule \\\\midrule", "", table5_5c)
+table5_5c <- gsub("\\\\caption", "\\\\caption\\*", table5_5c)
+table5_5c <- gsub("\\\\bigskip", "", table5_5c)
+table5_5c <- gsub("& \\(1\\)\\s+& \\(2\\)\\s+& \\(3\\)\\s+& \\(4\\)", "\\\\textit\\{Panel C After death\\}", table5_5c)
+
+table5_5c <- gsub("Vintage of 2-way MeSH term combinations\\} \\\\\\\\", 
+                  "Vintage of 2-way MeSH term combinations\\} \\\\\\\\ \\\\cmidrule(1r){2-3}\\\\cmidrule(1r){4-5}", 
+                  table5_5c)
+table5_5c <- gsub("Young    \\& Old      \\& Young    \\& Old \\\\\\\\",
+                  "Young    \\& Old      \\& Young    \\& Old \\\\\\\\ \\\\midrule", table5_5c)
+table5_5c <- gsub("\\\\end\\{table\\}", "", table5_5c)
+table5_5c <- gsub("\\\\begin\\{tabular\\}\\{lcccc\\}", "", table5_5c)
+table5_5c <- gsub("\\\\\\\\end\\{tabular\\}", "\\\\\\\\end\\{tabular\\}\\}", table5_5c)
+
+table5_5c <- gsub("\\\\centering", "", table5_5c)
+table5_5c <- gsub("\\\\caption\\*\\{no title\\}", "", table5_5c)
+
+table5_5c <- gsub("Vintage of cited references", "\\{\\\\makecell\\[c\\]\\{Vintage of\\\\\\\\cited references\\}\\}", table5_5c)
+table5_5c <- gsub("Vintage of 2-way MeSH term combinations", "\\{\\\\makecell\\[c\\]\\{Vintage of\\\\\\\\2-way MeSH term combinations\\}\\}", table5_5c)
+
+```
+
+```{{r,echo=F}}
+latex_header <- "
+\\documentclass{article}
+\\usepackage{graphicx}
+\\usepackage{booktabs}
+\\usepackage{caption}
+\\usepackage{makecell}
+\\begin{document}
+"
+latex_footer <- "}\\end{table} 
+Notes: Estimates stem from conditional (subfield) fixed effects Poisson specifications. In panel A, the dependent variable is the total number of publications by non-collaborators in a subfield in a particular year, where these pub- lications can either be proximate in intellectual space to the star’s source publication, or more distant (in the PMRA sense). Since PMRA generates both a cardinal and an ordinal measure of intellectual proximity, we parse the related articles using both measures, yielding a total of four different specifications. For the cardinal measure, a related article is deemed proximate if its similarity score is above 0.58, which corresponds to the median of relatedness in the sample. For the ordinal measure, a related article is deemed proximate if its similarity rank is below 90, which also corresponds to the median of similarity in the sample. In panel B, we focus on whether the content of entrants’ contributions in the subfield change after the superstar passes away. Each cited reference in a related article can either belong to the subfield, or fall outside of it; it can cite a publication of the star scientist associated with the subfield, or fail to cite any of the star’s past contributions. In panel C, the dependent variable is the total number of publications by non-collaborators in a subfield in a particular year, where these publications can either be “fresh” (citing young references, or being annotated by MeSH terms of recent vintage) or “stale” (citing old references, or being annotated by MeSH terms of distant vintage). All models incorporate a full suite of year effects and subfield age effects, as well as a term common to both treated and control subfields that switches from 0 to 1 after the death of the star. Exponentiating the coefficients and differencing from one yield numbers interpretable as elasticities. For example, the estimates in the first column of panel A imply that treated subfields see an increase in the number of PMRA-proximate contributions by non-collaborators after the superstar passes away, a statistically significant 100 × (exp[0.091] − 1) = 9.53\\%. Robust standard errors in parentheses, clustered at the level of the star scientist.\\
+\\end{document}"
+
+table5_latex <- c(
+  latex_header,
+  table5_5a,
+  table5_5b,
+  table5_5c,
+  latex_footer
+)
+
+writeLines(table5_latex, "table5.tex")
+```
+---
+
+## figure3
+
+```{r,echo=FALSE}
+library(lfe)
+library(dplyr)
+# Assuming allcod, ncoauth, and pctls are vectors containing the groups to iterate over
+pctls <- c("0", "belowmed", "50to55", "55to60", "60to65", "65to70", "70to75", "75to80", "80to85", "85to90", "90to95", "95to99", "above99")
+pctls <- as.vector(pctls)
+
+# Nested loop equivalent
+for(pctl in pctls) {
+      # Generating new variable
+      col_name <- paste0("ihs_prox_", pctl, "_", "ncoauth")
+      df[[col_name]] <- asinh(df[[paste0("nb_pmra_prox_", pctl, "_", "ncoauth")]])
+}
+
+test <- feols(ihs_prox_belowmed_ncoauth ~ after_death + after_death_cmmn | id+year+field_age, data = df,vcov = ~ star_id)
+
+pctls <- c("0", "belowmed", "50to55", "55to60", "60to65", "65to70", "70to75", "75to80", "80to85", "85to90", "90to95", "95to99", "above99")
+pctls <- as.vector(pctls)
+for (pctl in pctls) {
+  dvariable <- paste0("ihs_prox_", pctl, "_", "ncoauth")
+  regression <- paste0("reg",pctl," <- feols(",dvariable, " ~ after_death + after_death_cmmn | id+year+field_age, data = df, vcov = ~ star_id")
+  regression_p <- parse(regression)
+  eval(regression_p)
+}
+
+library(fixest)
+library(ggplot2)
+
+# Your percentiles
+pctls <- c("0", "belowmed", "50to55", "55to60", "60to65", "65to70", "70to75", "75to80", "80to85", "85to90", "90to95", "95to99", "above99")
+
+# Initialize an empty data frame to store results
+results_df <- data.frame(pctile = character(), estimate = numeric(), conf.low = numeric(), conf.high = numeric(), stringsAsFactors = FALSE)
+
+for (pctl in pctls) {
+  dvariable <- paste0("ihs_prox_", pctl, "_", "ncoauth")
+  formula <- as.formula(paste0(dvariable, " ~ after_death + after_death_cmmn | id+year+field_age"))
+  reg <- feols(formula, data = df, vcov = ~ star_id)
+  
+  # Extract the coefficient and confidence interval for 'after_death'
+  coef_est <- coef(summary(reg))["after_death"]
+  conf_int <- confint(reg)["after_death", ]
+  
+  # Add the results to the data frame
+  results_df <- rbind(results_df, data.frame(pctile = pctl, estimate = coef_est, conf.low = conf_int[1], conf.high = conf_int[2]))
+}
+
+# Convert pctile to factor for plotting
+results_df$pctile <- factor(results_df$pctile, levels = pctls)
+```
+
+---
+```{r,echo=FALSE}
+colnames(results_df)[3] <- "conf.low"
+colnames(results_df)[4] <- "conf.high"
+
+# 设置图形颜色
+aer_color <- "black"
+error_color <- "darkgray"
+
+# 生成图形
+ggplot(results_df, aes(x = pctile, y = estimate)) +
+  geom_errorbar(aes(ymin = conf.low, ymax = conf.high), width = 0.1, color = error_color, size = 1) +  # 误差线为浅灰色，减小bar的宽度，增加线条粗细
+  geom_point(color = aer_color, size = 3) +  # 坐标点为深灰色，增大点的大小
+  scale_x_discrete(labels = c("New scientists", "below 50th pctl.", "50th/55th pctl.", "55th/60th pctl.", "60th/65th pctl.", "65th/70th pctl.", "70th/75th pctl.", "75th/80th pctl.", "80th/85th pctl.", "85th/90th pctl.", "90th/95th pctl.", "95th/99th pctl.", "above 99th pctl.")) +
+  scale_y_continuous(limits = c(NA, 0.1)) +  # y轴的范围最大值为0.1，不设置最小值
+  theme_minimal() +  # 使用一个简洁的主题
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, color = "black", family = "Arial"),  # x轴标签倾斜45度，颜色设置为黑色
+    axis.text.y = element_text(color = "black", family = "Arial"),  # y轴标签颜色
+    axis.line = element_line(color = "black", size = 1),  # x轴和y轴加粗实线
+    panel.grid.major.x = element_blank(),  # 移除x轴的网格线
+    panel.grid.major.y = element_line(color = "grey80"),  # 设置y轴的主要网格线颜色
+    panel.grid.minor = element_blank(),  # 移除所有次要网格线
+    plot.title = element_text(hjust = 0, face = "bold", family = "Arial"),  # 标题靠左
+    axis.ticks = element_line(color = "black"),  # 刻度线颜色
+    axis.ticks.length = unit(-2.5, "mm"),  # 刻度线向外突出
+    panel.border = element_blank(),  # 移除边框
+    plot.margin = unit(c(1,0,1,1), "lines"),  # 调整边距
+    plot.background = element_rect(color = "black", fill = NA)  # 设置背景边框
+  ) +
+  labs(
+    x = "Non-collaborators' field overlap with the star",
+    y = "Estimated percent change in the\nnumber of papers in the super-\nstar’s ﬁeld after his/her death",
+    title = "Panel B. Entering authors and field overlap"
+  ) +
+  theme(axis.title.y = element_text(size = rel(1.4), angle = 90, vjust = 1.5, face = "plain", family = "Arial"))  # y轴标题字体增大，旋转90度，使用Arial字体，不加粗
+```
